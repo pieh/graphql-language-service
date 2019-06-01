@@ -227,6 +227,32 @@ query name {
     ).to.deep.equal([{label: 'Foo', detail: 'Human'}]);
   });
 
+  it('provides fragment spread suggestion', () => {
+    const fragmentDef = 'fragment Foo on Human { id }';
+
+    expect(
+      testSuggestions(
+        `${fragmentDef} query { human(id: "1") { `,
+        new Position(0, 54),
+      ),
+    ).to.deep.include({label: '...Foo', detail: 'Human'});
+
+    expect(
+      testSuggestions(
+        `query { human(id: "1") { }} ${fragmentDef}`,
+        new Position(0, 25),
+      ),
+    ).to.deep.include({label: '...Foo', detail: 'Human'});
+
+    // Test on abstract type
+    expect(
+      testSuggestions(
+        `${fragmentDef} query { hero(episode: JEDI) { `,
+        new Position(0, 59),
+      ),
+    ).to.deep.include({label: '...Foo', detail: 'Human'});
+  });
+
   it('provides correct directive suggestions', () => {
     expect(testSuggestions('{ test @', new Position(0, 8))).to.deep.equal([
       {label: 'include'},

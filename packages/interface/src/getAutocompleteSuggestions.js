@@ -83,7 +83,7 @@ export function getAutocompleteSuggestions(
 
   // Field names
   if (kind === 'SelectionSet' || kind === 'Field' || kind === 'AliasedField') {
-    return getSuggestionsForFieldNames(token, typeInfo, schema);
+    return getSuggestionsForFieldNames(token, typeInfo, schema, queryText);
   }
 
   // Argument names
@@ -166,6 +166,7 @@ function getSuggestionsForFieldNames(
   token: ContextToken,
   typeInfo: TypeInfo,
   schema: GraphQLSchema,
+  queryText: string,
 ): Array<CompletionItem> {
   if (typeInfo.parentType) {
     const parentType = typeInfo.parentType;
@@ -179,15 +180,28 @@ function getSuggestionsForFieldNames(
     if (parentType === schema.getQueryType()) {
       fields.push(SchemaMetaFieldDef, TypeMetaFieldDef);
     }
+    const fragmentSuggestions = getFragmentsForType(
+      token,
+      parentType,
+      schema,
+      queryText,
+    );
     return hintList(
       token,
-      fields.map(field => ({
+      fields
+        .map(field => ({
         label: field.name,
         detail: String(field.type),
         documentation: field.description,
         isDeprecated: field.isDeprecated,
         deprecationReason: field.deprecationReason,
+        }))
+        .concat(
+          fragmentSuggestions.map(fragmentSuggestion => ({
+            ...fragmentSuggestion,
+            label: `...${fragmentSuggestion.label}`,
       })),
+        ),
     );
   }
   return [];
@@ -268,9 +282,9 @@ function getSuggestionsForFragmentTypeConditions(
   );
 }
 
-function getSuggestionsForFragmentSpread(
+function getFragmentsForType(
   token: ContextToken,
-  typeInfo: TypeInfo,
+  type: GraphQLType,
   schema: GraphQLSchema,
   queryText: string,
 ): Array<CompletionItem> {
@@ -290,25 +304,35 @@ function getSuggestionsForFragmentSpread(
         defState.name === frag.name.value
       ) &&
       // Only include fragments which could possibly be spread here.
-      isCompositeType(typeInfo.parentType) &&
+      isCompositeType(type) &&
       isCompositeType(typeMap[frag.typeCondition.name.value]) &&
-      doTypesOverlap(
-        schema,
-        typeInfo.parentType,
-        typeMap[frag.typeCondition.name.value],
-      ),
+      doTypesOverlap(schema, type, typeMap[frag.typeCondition.name.value]),
   );
-
-  return hintList(
-    token,
-    relevantFrags.map(frag => ({
+  return relevantFrags.map(frag => ({
       label: frag.name.value,
       detail: String(typeMap[frag.typeCondition.name.value]),
       documentation: `fragment ${frag.name.value} on ${
         frag.typeCondition.name.value
       }`,
-    })),
+  }));
+}
+
+function getSuggestionsForFragmentSpread(
+  token: ContextToken,
+  typeInfo: TypeInfo,
+  schema: GraphQLSchema,
+  queryText: string,
+): Array<CompletionItem> {
+  let relevantFrags = [];
+  if (typeInfo.parentType) {
+    relevantFrags = getFragmentsForType(
+      token,
+      typeInfo.parentType,
+      schema,
+      queryText,
   );
+}
+  return hintList(token, relevantFrags);
 }
 
 function getFragmentDefinitions(
